@@ -1,0 +1,10 @@
+name: intentforge
+version: 0.1.0
+skills:
+  - intent-forge
+  - intent-forge-planner
+  - intent-forge-jira
+  - intent-forge-implementer
+  - intent-forge-tester
+  - intent-forge-closeout
+  - intent-forge-release
