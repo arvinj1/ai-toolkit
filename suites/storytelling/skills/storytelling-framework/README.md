@@ -73,10 +73,10 @@ Every Jira artifact uses this template:
 - Every deliverable should answer: *What's the problem? What's the solution? Why should I care?*
 
 ## Suite
-This skill is part of the **intentforge** suite. Install the suite to activate it:
+This skill is part of the **storytelling** suite. Install the suite to activate it:
 
 ```bash
-./install/install.sh intentforge --target user
+./install/install.sh storytelling --target user
 # or for a specific project:
-./install/install.sh intentforge --target project --project-root /path/to/repo
+./install/install.sh storytelling --target project --project-root /path/to/repo
 ```
