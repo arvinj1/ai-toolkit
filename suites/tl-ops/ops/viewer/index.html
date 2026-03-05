@@ -1,0 +1,723 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>TL-Ops Dashboard</title>
+
+  <!-- marked.js — Markdown renderer, no build step needed -->
+  <script src="https://cdn.jsdelivr.net/npm/marked@12/marked.min.js"></script>
+
+  <style>
+    /* ── Reset & base ── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:         #0f1117;
+      --bg-surface: #1a1d27;
+      --bg-card:    #21253a;
+      --bg-hover:   #2a2f47;
+      --border:     #2e3250;
+      --accent:     #6c8ef7;
+      --accent-dim: #3d4f99;
+      --green:      #34d399;
+      --amber:      #fbbf24;
+      --red:        #f87171;
+      --text:       #e2e8f0;
+      --text-muted: #8892b0;
+      --text-dim:   #4a5568;
+      --sidebar-w:  280px;
+      --radius:     10px;
+      --shadow:     0 4px 24px rgba(0,0,0,.45);
+    }
+
+    html, body { height: 100%; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--text); }
+
+    /* ── Layout ── */
+    .shell { display: flex; height: 100vh; overflow: hidden; }
+
+    /* ── Sidebar ── */
+    .sidebar {
+      width: var(--sidebar-w);
+      min-width: var(--sidebar-w);
+      background: var(--bg-surface);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .sidebar-header {
+      padding: 20px 18px 14px;
+      border-bottom: 1px solid var(--border);
+    }
+    .sidebar-header .logo {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      color: var(--accent);
+      margin-bottom: 4px;
+    }
+    .sidebar-header h1 {
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--text);
+      line-height: 1.3;
+    }
+
+    .search-wrap {
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--border);
+    }
+    .search-wrap input {
+      width: 100%;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 7px 10px;
+      color: var(--text);
+      font-size: 13px;
+      outline: none;
+      transition: border-color .15s;
+    }
+    .search-wrap input:focus { border-color: var(--accent); }
+    .search-wrap input::placeholder { color: var(--text-dim); }
+
+    .dash-list {
+      flex: 1;
+      overflow-y: auto;
+      padding: 8px 0;
+    }
+    .dash-list::-webkit-scrollbar { width: 4px; }
+    .dash-list::-webkit-scrollbar-track { background: transparent; }
+    .dash-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+    .dash-list-label {
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+      color: var(--text-dim);
+      padding: 8px 18px 4px;
+    }
+
+    .dash-item {
+      display: flex;
+      flex-direction: column;
+      padding: 9px 18px;
+      cursor: pointer;
+      border-left: 3px solid transparent;
+      transition: background .12s, border-color .12s;
+    }
+    .dash-item:hover { background: var(--bg-hover); }
+    .dash-item.active {
+      background: var(--bg-card);
+      border-left-color: var(--accent);
+    }
+    .dash-item .date {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text);
+    }
+    .dash-item .fname {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-top: 2px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .dash-item .badge {
+      display: inline-block;
+      font-size: 9px;
+      font-weight: 700;
+      padding: 1px 5px;
+      border-radius: 3px;
+      margin-top: 4px;
+      width: fit-content;
+    }
+    .badge-latest { background: var(--accent-dim); color: var(--accent); }
+
+    .empty-state {
+      padding: 32px 18px;
+      color: var(--text-dim);
+      font-size: 13px;
+      line-height: 1.6;
+    }
+
+    .sidebar-footer {
+      padding: 12px 18px;
+      border-top: 1px solid var(--border);
+      font-size: 11px;
+      color: var(--text-dim);
+    }
+    .sidebar-footer a { color: var(--accent); text-decoration: none; }
+
+    /* ── Main pane ── */
+    .main {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      background: var(--bg);
+    }
+
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 14px 28px;
+      border-bottom: 1px solid var(--border);
+      background: var(--bg-surface);
+      min-height: 56px;
+      gap: 12px;
+      flex-shrink: 0;
+    }
+    .topbar .title {
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--text);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .topbar .actions { display: flex; gap: 8px; flex-shrink: 0; }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 12px;
+      font-weight: 600;
+      padding: 6px 12px;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      background: var(--bg-card);
+      color: var(--text-muted);
+      cursor: pointer;
+      transition: background .12s, color .12s, border-color .12s;
+      text-decoration: none;
+    }
+    .btn:hover { background: var(--bg-hover); color: var(--text); border-color: var(--accent-dim); }
+    .btn-primary { background: var(--accent-dim); color: var(--accent); border-color: var(--accent-dim); }
+    .btn-primary:hover { background: var(--accent); color: #fff; }
+
+    .content-wrap {
+      flex: 1;
+      overflow-y: auto;
+      padding: 36px 40px 60px;
+    }
+    .content-wrap::-webkit-scrollbar { width: 6px; }
+    .content-wrap::-webkit-scrollbar-track { background: transparent; }
+    .content-wrap::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+    /* ── Welcome / empty ── */
+    .welcome {
+      max-width: 560px;
+      margin: 80px auto;
+      text-align: center;
+    }
+    .welcome .icon { font-size: 48px; margin-bottom: 20px; }
+    .welcome h2 { font-size: 22px; font-weight: 700; margin-bottom: 10px; color: var(--text); }
+    .welcome p { color: var(--text-muted); font-size: 14px; line-height: 1.7; }
+    .welcome code {
+      display: inline-block;
+      margin-top: 20px;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 12px 20px;
+      font-family: "Fira Code", "Cascadia Code", monospace;
+      font-size: 13px;
+      color: var(--accent);
+    }
+
+    /* ── Markdown styles ── */
+    .md-body {
+      max-width: 820px;
+      line-height: 1.75;
+      font-size: 15px;
+    }
+    .md-body h1 {
+      font-size: 26px;
+      font-weight: 800;
+      color: var(--text);
+      margin-bottom: 6px;
+      padding-bottom: 12px;
+      border-bottom: 2px solid var(--border);
+    }
+    .md-body h2 {
+      font-size: 18px;
+      font-weight: 700;
+      color: var(--accent);
+      margin-top: 40px;
+      margin-bottom: 12px;
+      padding-bottom: 6px;
+      border-bottom: 1px solid var(--border);
+    }
+    .md-body h3 {
+      font-size: 15px;
+      font-weight: 700;
+      color: var(--text);
+      margin-top: 24px;
+      margin-bottom: 8px;
+    }
+    .md-body p { margin-bottom: 14px; color: var(--text); }
+    .md-body ul, .md-body ol {
+      padding-left: 22px;
+      margin-bottom: 14px;
+    }
+    .md-body li { margin-bottom: 6px; color: var(--text); }
+    .md-body li p { margin-bottom: 4px; }
+    .md-body strong { color: var(--text); font-weight: 700; }
+    .md-body em { color: var(--text-muted); }
+    .md-body a { color: var(--accent); text-decoration: none; }
+    .md-body a:hover { text-decoration: underline; }
+    .md-body blockquote {
+      border-left: 3px solid var(--amber);
+      padding: 8px 16px;
+      background: rgba(251,191,36,.06);
+      border-radius: 0 6px 6px 0;
+      margin-bottom: 14px;
+    }
+    .md-body blockquote p { color: var(--amber); margin: 0; }
+    .md-body code {
+      font-family: "Fira Code", "Cascadia Code", monospace;
+      font-size: 13px;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 1px 5px;
+      color: var(--accent);
+    }
+    .md-body pre {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 16px 20px;
+      overflow-x: auto;
+      margin-bottom: 16px;
+    }
+    .md-body pre code {
+      background: none;
+      border: none;
+      padding: 0;
+      font-size: 13px;
+      color: var(--text-muted);
+    }
+    .md-body hr {
+      border: none;
+      border-top: 1px solid var(--border);
+      margin: 32px 0;
+    }
+
+    /* ── Tables ── */
+    .md-body table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 20px;
+      font-size: 14px;
+      border-radius: var(--radius);
+      overflow: hidden;
+      border: 1px solid var(--border);
+    }
+    .md-body thead { background: var(--bg-card); }
+    .md-body thead th {
+      text-align: left;
+      padding: 10px 14px;
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .06em;
+      color: var(--text-muted);
+      border-bottom: 1px solid var(--border);
+    }
+    .md-body tbody tr { transition: background .1s; }
+    .md-body tbody tr:hover { background: var(--bg-hover); }
+    .md-body tbody tr:nth-child(even) { background: rgba(255,255,255,.02); }
+    .md-body tbody tr:nth-child(even):hover { background: var(--bg-hover); }
+    .md-body td {
+      padding: 9px 14px;
+      border-bottom: 1px solid var(--border);
+      vertical-align: top;
+    }
+
+    /* ── RAG badge colouring in tables ── */
+    .md-body td:nth-child(2) { font-weight: 600; }
+
+    /* ── RAG pills for the status overview ── */
+    .rag-bar {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin-bottom: 28px;
+      padding: 16px 20px;
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+    }
+    .rag-pill {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      font-size: 13px;
+      font-weight: 600;
+      padding: 6px 14px;
+      border-radius: 20px;
+      border: 1px solid;
+    }
+    .rag-pill.green  { background: rgba(52,211,153,.1); border-color: var(--green);  color: var(--green);  }
+    .rag-pill.amber  { background: rgba(251,191,36,.1); border-color: var(--amber);  color: var(--amber);  }
+    .rag-pill.red    { background: rgba(248,113,113,.1); border-color: var(--red);    color: var(--red);    }
+    .rag-pill .dot   { width: 8px; height: 8px; border-radius: 50%; background: currentColor; flex-shrink: 0; }
+
+    /* ── Meta ribbon ── */
+    .meta-ribbon {
+      display: flex;
+      gap: 20px;
+      flex-wrap: wrap;
+      margin-bottom: 28px;
+      font-size: 12px;
+      color: var(--text-dim);
+    }
+    .meta-ribbon span { display: flex; align-items: center; gap: 4px; }
+
+    /* ── Print ── */
+    @media print {
+      .sidebar, .topbar { display: none; }
+      .content-wrap { padding: 0; overflow: visible; }
+      .md-body { max-width: 100%; font-size: 12px; }
+      .main { overflow: visible; }
+    }
+
+    /* ── Responsive ── */
+    @media (max-width: 640px) {
+      .sidebar { display: none; }
+      .content-wrap { padding: 20px 16px 40px; }
+    }
+
+    /* ── Loader ── */
+    .loader {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      height: 200px;
+      color: var(--text-dim);
+      font-size: 14px;
+      gap: 8px;
+    }
+    .spinner {
+      width: 18px; height: 18px;
+      border: 2px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin .7s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+
+<div class="shell">
+
+  <!-- ── Sidebar ── -->
+  <aside class="sidebar">
+    <div class="sidebar-header">
+      <div class="logo">TL-Ops</div>
+      <h1>Dashboard<br>Viewer</h1>
+    </div>
+
+    <div class="search-wrap">
+      <input type="text" id="search" placeholder="Filter by date…" autocomplete="off" />
+    </div>
+
+    <nav class="dash-list" id="dashList">
+      <div class="empty-state" id="listEmpty" style="display:none">
+        No dashboards found.<br><br>
+        Run <strong>./ops/run_dashboard.sh</strong> to generate your first one.
+      </div>
+    </nav>
+
+    <div class="sidebar-footer">
+      <span id="dashCount">0 dashboards</span>
+    </div>
+  </aside>
+
+  <!-- ── Main pane ── -->
+  <main class="main">
+    <div class="topbar">
+      <div class="title" id="topTitle">TL-Ops Dashboard Viewer</div>
+      <div class="actions">
+        <button class="btn" id="btnRefresh" title="Refresh list">⟳ Refresh</button>
+        <button class="btn" id="btnPrint" title="Print / Save as PDF">🖨 Print</button>
+        <button class="btn btn-primary" id="btnRaw" title="View raw Markdown" style="display:none">⬇ Raw</button>
+      </div>
+    </div>
+
+    <div class="content-wrap" id="contentWrap">
+      <div class="welcome" id="welcome">
+        <div class="icon">📊</div>
+        <h2>TL Dashboard Viewer</h2>
+        <p>Select a dashboard from the sidebar.<br>
+           Run <strong>./ops/run_dashboard.sh</strong> to generate one first.</p>
+        <code>./ops/collect.sh --all &amp;&amp; ./ops/run_dashboard.sh</code>
+      </div>
+    </div>
+  </main>
+
+</div>
+
+<script>
+// ─── Config ──────────────────────────────────────────────────────────────────
+// The viewer serves from ops/viewer/, with a symlink "dashboards" → outputs/dashboards/
+// All .md files in dashboards/ are listed and rendered.
+const DASH_DIR = './dashboards/';
+
+// ─── State ───────────────────────────────────────────────────────────────────
+let allFiles = [];
+let currentFile = null;
+
+// ─── DOM refs ────────────────────────────────────────────────────────────────
+const dashList   = document.getElementById('dashList');
+const listEmpty  = document.getElementById('listEmpty');
+const dashCount  = document.getElementById('dashCount');
+const contentWrap= document.getElementById('contentWrap');
+const topTitle   = document.getElementById('topTitle');
+const welcome    = document.getElementById('welcome');
+const btnRefresh = document.getElementById('btnRefresh');
+const btnPrint   = document.getElementById('btnPrint');
+const btnRaw     = document.getElementById('btnRaw');
+const searchInput= document.getElementById('search');
+
+// ─── Fetch dashboard file list ────────────────────────────────────────────────
+// Python's http.server serves a directory listing as HTML — we parse it.
+async function fetchFileList() {
+  try {
+    const res = await fetch(DASH_DIR);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const html = await res.text();
+
+    // Parse <a href="..."> links from the directory listing
+    const anchors = [...html.matchAll(/href="([^"]+\.md)"/gi)];
+    const files = anchors
+      .map(m => m[1])
+      .filter(f => f.startsWith('TL_Dashboard_') || f.endsWith('.md'))
+      .filter(f => !f.includes('/'))  // top-level only
+      .sort()
+      .reverse(); // newest first
+
+    return files;
+  } catch (e) {
+    console.error('Could not list dashboard directory:', e);
+    return [];
+  }
+}
+
+// ─── Extract date from filename ───────────────────────────────────────────────
+function fileToDate(fname) {
+  const m = fname.match(/(\d{4}-\d{2}-\d{2})/);
+  return m ? m[1] : fname.replace('.md', '');
+}
+
+// ─── Render sidebar list ──────────────────────────────────────────────────────
+function renderList(files) {
+  // Clear existing items (but keep listEmpty)
+  [...dashList.querySelectorAll('.dash-item, .dash-list-label')].forEach(el => el.remove());
+
+  if (files.length === 0) {
+    listEmpty.style.display = '';
+    dashCount.textContent = '0 dashboards';
+    return;
+  }
+  listEmpty.style.display = 'none';
+  dashCount.textContent = `${files.length} dashboard${files.length !== 1 ? 's' : ''}`;
+
+  files.forEach((fname, i) => {
+    const date = fileToDate(fname);
+    const item = document.createElement('div');
+    item.className = 'dash-item' + (fname === currentFile ? ' active' : '');
+    item.dataset.file = fname;
+
+    const dateEl = document.createElement('div');
+    dateEl.className = 'date';
+    dateEl.textContent = formatDate(date);
+
+    const fnameEl = document.createElement('div');
+    fnameEl.className = 'fname';
+    fnameEl.textContent = fname;
+
+    item.appendChild(dateEl);
+    item.appendChild(fnameEl);
+
+    if (i === 0) {
+      const badge = document.createElement('span');
+      badge.className = 'badge badge-latest';
+      badge.textContent = 'Latest';
+      item.appendChild(badge);
+    }
+
+    item.addEventListener('click', () => loadDashboard(fname));
+    dashList.appendChild(item);
+  });
+}
+
+function formatDate(dateStr) {
+  try {
+    const d = new Date(dateStr + 'T12:00:00');
+    return d.toLocaleDateString('en-GB', { weekday:'short', day:'numeric', month:'short', year:'numeric' });
+  } catch { return dateStr; }
+}
+
+// ─── Load and render a dashboard ─────────────────────────────────────────────
+async function loadDashboard(fname) {
+  currentFile = fname;
+
+  // Update sidebar active state
+  dashList.querySelectorAll('.dash-item').forEach(el => {
+    el.classList.toggle('active', el.dataset.file === fname);
+  });
+
+  // Show loader
+  contentWrap.innerHTML = '<div class="loader"><div class="spinner"></div> Loading…</div>';
+  topTitle.textContent = fname;
+  btnRaw.style.display = '';
+  btnRaw.onclick = () => window.open(DASH_DIR + fname, '_blank');
+
+  try {
+    const res = await fetch(DASH_DIR + fname);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const md = await res.text();
+
+    // Strip the <!-- save to: ... --> comment if present
+    const cleaned = md.replace(/^<!--.*?-->\s*/s, '');
+
+    renderMarkdown(cleaned, fname);
+  } catch (e) {
+    contentWrap.innerHTML = `
+      <div class="welcome">
+        <div class="icon">⚠️</div>
+        <h2>Could not load dashboard</h2>
+        <p>${e.message}</p>
+      </div>`;
+  }
+}
+
+// ─── RAG extraction ───────────────────────────────────────────────────────────
+function extractRAG(md) {
+  // Look for the RAG table rows
+  const pills = [];
+  const ragSection = md.match(/## RAG Status[\s\S]*?(?=##|$)/);
+  if (!ragSection) return [];
+
+  const rows = ragSection[0].matchAll(/\|\s*([^|]+?)\s*\|\s*(🟢|🟡|🔴)[^|]*\|/g);
+  for (const row of rows) {
+    const dim = row[1].trim();
+    const emoji = row[2];
+    if (dim.toLowerCase().includes('dimension')) continue; // skip header
+    const cls = emoji === '🟢' ? 'green' : emoji === '🟡' ? 'amber' : 'red';
+    const label = emoji === '🟢' ? 'Green' : emoji === '🟡' ? 'Amber' : 'Red';
+    pills.push({ dim, cls, label });
+  }
+  return pills;
+}
+
+// ─── Render Markdown ──────────────────────────────────────────────────────────
+function renderMarkdown(md, fname) {
+  const date = fileToDate(fname);
+  const ragPills = extractRAG(md);
+
+  // Configure marked
+  marked.setOptions({ breaks: true, gfm: true });
+
+  const html = marked.parse(md);
+
+  let ragBar = '';
+  if (ragPills.length > 0) {
+    ragBar = '<div class="rag-bar">' +
+      ragPills.map(p =>
+        `<div class="rag-pill ${p.cls}"><span class="dot"></span>${p.dim}: ${p.label}</div>`
+      ).join('') +
+      '</div>';
+  }
+
+  const meta = `<div class="meta-ribbon">
+    <span>📅 ${formatDate(date)}</span>
+    <span>📄 ${fname}</span>
+  </div>`;
+
+  contentWrap.innerHTML = `
+    ${meta}
+    ${ragBar}
+    <div class="md-body">${html}</div>
+  `;
+
+  topTitle.textContent = `TL Dashboard — ${formatDate(date)}`;
+
+  // Scroll to top
+  contentWrap.scrollTop = 0;
+}
+
+// ─── Search / filter ──────────────────────────────────────────────────────────
+searchInput.addEventListener('input', () => {
+  const q = searchInput.value.trim().toLowerCase();
+  const filtered = q ? allFiles.filter(f => f.toLowerCase().includes(q)) : allFiles;
+  renderList(filtered);
+});
+
+// ─── Refresh ─────────────────────────────────────────────────────────────────
+async function refresh() {
+  btnRefresh.textContent = '⟳ …';
+  btnRefresh.disabled = true;
+  allFiles = await fetchFileList();
+  renderList(allFiles);
+  // If the current file is still available, keep it selected; otherwise load latest
+  if (allFiles.length > 0 && !allFiles.includes(currentFile)) {
+    loadDashboard(allFiles[0]);
+  }
+  btnRefresh.textContent = '⟳ Refresh';
+  btnRefresh.disabled = false;
+}
+
+btnRefresh.addEventListener('click', refresh);
+btnPrint.addEventListener('click', () => window.print());
+
+// ─── Keyboard shortcuts ───────────────────────────────────────────────────────
+document.addEventListener('keydown', e => {
+  // j/k to navigate list
+  if (e.target.tagName === 'INPUT') return;
+  if (!allFiles.length) return;
+  const idx = currentFile ? allFiles.indexOf(currentFile) : -1;
+  if (e.key === 'j' || e.key === 'ArrowDown') {
+    e.preventDefault();
+    const next = Math.min(idx + 1, allFiles.length - 1);
+    if (allFiles[next]) loadDashboard(allFiles[next]);
+  }
+  if (e.key === 'k' || e.key === 'ArrowUp') {
+    e.preventDefault();
+    const prev = Math.max(idx - 1, 0);
+    if (allFiles[prev]) loadDashboard(allFiles[prev]);
+  }
+  if (e.key === '/') {
+    e.preventDefault();
+    searchInput.focus();
+  }
+  if (e.key === 'p' && (e.metaKey || e.ctrlKey)) {
+    e.preventDefault();
+    window.print();
+  }
+});
+
+// ─── Init ─────────────────────────────────────────────────────────────────────
+(async () => {
+  allFiles = await fetchFileList();
+  renderList(allFiles);
+  // Auto-load the latest dashboard if any exist
+  if (allFiles.length > 0) {
+    loadDashboard(allFiles[0]);
+  }
+})();
+</script>
+
+</body>
+</html>

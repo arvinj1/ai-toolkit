@@ -8,7 +8,10 @@ A **Claude skill** that reads lightweight Markdown inputs and generates a single
 
 1. [Quick start](#quick-start)
 2. [How it works](#how-it-works)
-3. [Input files — what they are and how to fill them](#input-files)
+3. [Tools](#tools)
+   - [ops/collect.sh](#opscollectsh) — pull data from Jira, GitHub, Linear, PagerDuty, Slack, Calendar
+   - [ops/serve.sh + viewer](#opsservesh--viewer) — browse and print dashboards in a web UI
+4. [Input files — what they are and how to fill them](#input-files)
    - [inputs/todo.md](#inputstodomd) — today
    - [inputs/status_weekly.md](#inputsstatus_weeklymd) — the week
    - [inputs/decisions.md](#inputsdecisionsmd) — decision log
@@ -18,7 +21,7 @@ A **Claude skill** that reads lightweight Markdown inputs and generates a single
    - [inputs/people/*.md](#inputspeoplemd) — team members
    - [inputs/jira_snapshot.md](#inputsjira_snapshotmd) — optional Jira pull
    - [inputs/client_requests.md](#inputsclient_requestsmd) — optional client input
-4. [Populating from external tools](#populating-from-external-tools)
+5. [Populating from external tools](#populating-from-external-tools)
    - [Jira](#jira)
    - [GitHub Issues / Projects](#github-issues--projects)
    - [Linear](#linear)
@@ -26,28 +29,41 @@ A **Claude skill** that reads lightweight Markdown inputs and generates a single
    - [PagerDuty / OpsGenie](#pagerduty--opsgenie)
    - [Google Calendar](#google-calendar)
    - [Any other tool](#any-other-tool)
-5. [Tone / audience mode](#tone--audience-mode)
-6. [Running the dashboard](#running-the-dashboard)
-7. [Outputs](#outputs)
-8. [Suggested cadence](#suggested-cadence)
-9. [Repo philosophy](#repo-philosophy)
+6. [Tone / audience mode](#tone--audience-mode)
+7. [Running the dashboard](#running-the-dashboard)
+8. [Outputs](#outputs)
+9. [Suggested cadence](#suggested-cadence)
+10. [Repo philosophy](#repo-philosophy)
 
 ---
 
 ## Quick start
 
 ```bash
-# 1. Copy and configure your Claude CLI runner
+# 1. Set up your Claude CLI runner
 cp ops/claude_runner.example.sh ops/claude_runner.sh
 chmod +x ops/claude_runner.sh
-# Edit ops/claude_runner.sh so it calls your actual Claude CLI
+# Edit ops/claude_runner.sh to call your actual Claude CLI
 
-# 2. Fill in your minimal inputs (see below)
-#    At minimum: inputs/todo.md + inputs/status_weekly.md
+# 2. Configure data sources (Jira, GitHub, etc.)
+#    Edit ops/collect.config with your credentials
 
-# 3. Run
+# 3. Pull data from your tools
+./ops/collect.sh --all
+
+# 4. Generate the dashboard
 ./ops/run_dashboard.sh
 # Output → outputs/dashboards/TL_Dashboard_YYYY-MM-DD.md
+
+# 5. Open the dashboard viewer
+./ops/serve.sh --open
+# Browser → http://localhost:8765
+```
+
+Or all in one line once set up:
+
+```bash
+./ops/collect.sh --all && ./ops/run_dashboard.sh
 ```
 
 ---
@@ -72,6 +88,92 @@ outputs/dashboards/TL_Dashboard_YYYY-MM-DD.md
 ```
 
 The inputs are **human-edited summaries**, not a mirror of Jira. The goal is 5–10 minutes of your time, not 45 minutes of copy-paste.
+
+---
+
+## Tools
+
+### `ops/collect.sh`
+
+Pulls signal from your connected tools and writes directly into the `inputs/` Markdown files.
+Run it before `run_dashboard.sh` to populate inputs automatically.
+
+```bash
+# Pull from all configured tools
+./ops/collect.sh --all
+
+# Pull selectively
+./ops/collect.sh --jira --github
+./ops/collect.sh --calendar --slack
+
+# See what would be written without touching any files
+./ops/collect.sh --all --dry-run
+
+# Full help
+./ops/collect.sh --help
+```
+
+**What it pulls:**
+
+| Flag | Source | Writes to |
+|---|---|---|
+| `--jira` | Jira active sprint | `inputs/jira_snapshot.md` |
+| `--github` | GitHub issues, PRs, Projects | `inputs/status_weekly.md`, `inputs/todo.md`, `inputs/signals/incidents.md` |
+| `--linear` | Linear active cycle | `inputs/jira_snapshot.md` |
+| `--pagerduty` | PagerDuty incidents (last 7 days) | `inputs/signals/incidents.md` |
+| `--opsgenie` | OpsGenie open alerts | `inputs/signals/incidents.md` |
+| `--slack` | Channel messages matching signal keywords | `inputs/signals/incidents.md` |
+| `--calendar` | Today's meetings via gcalcli or iCal URL | `inputs/todo.md` |
+
+**First-time setup:**
+
+```bash
+# ops/collect.config is already in .gitignore — safe to put credentials in it
+# Fill in only the tools you use; leave others blank to skip them
+nano ops/collect.config
+```
+
+**Dependencies** (install only what you use):
+- `jq` — required for all API collectors (`brew install jq` / `apt install jq`)
+- `gh` — required for GitHub (`brew install gh` / https://cli.github.com)
+- `gcalcli` — required for Calendar gcalcli method (`pip install gcalcli`)
+
+---
+
+### `ops/serve.sh` + viewer
+
+A local web app that renders your `outputs/dashboards/` Markdown files as a polished, searchable dashboard browser.
+No installation. Zero dependencies beyond Python (already on your machine).
+
+```bash
+# Start the viewer
+./ops/serve.sh
+
+# Auto-open browser
+./ops/serve.sh --open
+
+# Custom port
+./ops/serve.sh --port 9000
+```
+
+Then open **http://localhost:8765** in any browser.
+
+**Viewer features:**
+- Lists all dashboards newest-first with a date label and "Latest" badge
+- Live search / filter by date
+- Renders Markdown tables, RAG status, code blocks with full styling
+- RAG pill bar at the top of each dashboard (🟢/🟡/🔴 at a glance)
+- Keyboard navigation: `j`/`k` or `↓`/`↑` to move between dashboards, `/` to focus search
+- Print / Save as PDF button (browser print dialog, clean layout)
+- Raw Markdown download button
+- Works completely offline — no external requests except the `marked.js` CDN on first load
+
+**Sharing dashboards:**
+
+The viewer is a single `index.html` file. To share with your manager or director:
+- **Option A:** Send the raw `.md` file from `outputs/dashboards/`
+- **Option B:** Print to PDF from the viewer (`⌘P` / `Ctrl+P`)
+- **Option C:** Host `ops/viewer/` on any internal static file server or GitHub Pages
 
 ---
 
@@ -668,10 +770,12 @@ Outputs are append-only and timestamped — never edit them. They feed the Delta
 
 | When | What | Time |
 |---|---|---|
-| Every morning | Update `inputs/todo.md` | 3 min |
+| Every morning | `./ops/collect.sh --calendar` (auto-fills meetings) | 30 sec |
+| Every morning | Glance at `inputs/todo.md`, add outcomes + blockers | 2 min |
 | As they happen | Append to `decisions.md`, `incidents.md` | 2 min each |
-| Friday or Monday | Update `inputs/status_weekly.md` | 10 min |
-| Monday | Run `./ops/run_dashboard.sh` | 1 min |
+| Friday or Monday | `./ops/collect.sh --jira --github --linear` (auto-fills sprint data) | 30 sec |
+| Friday or Monday | Review + tidy `inputs/status_weekly.md` | 5 min |
+| Monday | `./ops/run_dashboard.sh` → `./ops/serve.sh --open` | 1 min |
 | Monthly | Create summary in `outputs/monthly/` from last 4 dashboards | 15 min |
 
 ---

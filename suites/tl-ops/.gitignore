@@ -1,0 +1,14 @@
+# Credentials — never commit these
+ops/collect.config
+
+# Claude runner (user-specific)
+ops/claude_runner.sh
+
+# Viewer symlink (created at runtime by serve.sh)
+ops/viewer/dashboards
+
+# State
+state/
+
+# macOS
+.DS_Store
