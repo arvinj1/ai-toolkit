@@ -1,17 +1,33 @@
-# TL-Ops: Team Lead Dashboard + Leadership Ops Suite
+# TL-Ops: Team Lead Leadership Operating System
 
-A **Claude skill** that reads lightweight Markdown inputs and generates a single, crisp **TL Dashboard** covering every TL expectation dimension — Technology Excellence, Execution & Client Focus, and Team & Community Influence.
+A suite of **LLM skills** that give Engineering Team Leads a structured weekly operating rhythm and a strategic team composition framework — without sending data to any third-party SaaS.
+
+Works with **Claude, GPT-4o, Gemini, Llama (local), AWS Bedrock, Azure OpenAI** — see [LLM runners](#llm-runners).
+
+---
+
+## Skills
+
+| Skill | When to run | What it produces |
+|---|---|---|
+| **tl-dashboard** | Weekly (Monday) | Full ops dashboard: RAG status, outcomes, risks, decisions, people health, next week plan |
+| **tl-team-composer** | Quarterly or at hiring decision points | Team composition analysis: humans vs agents, workload profile, hire vs agent recommendations, 90-day target |
 
 ---
 
 ## Table of contents
 
 1. [Quick start](#quick-start)
-2. [How it works](#how-it-works)
-3. [Tools](#tools)
+2. [Skills](#skills-1)
+   - [tl-dashboard](#tl-dashboard) — weekly ops
+   - [tl-team-composer](#tl-team-composer) — strategic team composition
+3. [How it works](#how-it-works)
+4. [Tools](#tools)
    - [ops/collect.sh](#opscollectsh) — pull data from Jira, GitHub, Linear, PagerDuty, Slack, Calendar
-   - [ops/serve.sh + viewer](#opsservesh--viewer) — browse and print dashboards in a web UI
-4. [Input files — what they are and how to fill them](#input-files)
+   - [ops/compose.sh](#opscomposesh) — run the team composer
+   - [ops/serve.sh + viewer](#opsservesh--viewer) — browse and print outputs in a web UI
+   - [LLM runners](#llm-runners) — Claude, GPT-4o, Gemini, Ollama, Bedrock, Azure
+5. [Input files — what they are and how to fill them](#input-files)
    - [inputs/todo.md](#inputstodomd) — today
    - [inputs/status_weekly.md](#inputsstatus_weeklymd) — the week
    - [inputs/decisions.md](#inputsdecisionsmd) — decision log
@@ -21,7 +37,8 @@ A **Claude skill** that reads lightweight Markdown inputs and generates a single
    - [inputs/people/*.md](#inputspeoplemd) — team members
    - [inputs/jira_snapshot.md](#inputsjira_snapshotmd) — optional Jira pull
    - [inputs/client_requests.md](#inputsclient_requestsmd) — optional client input
-5. [Populating from external tools](#populating-from-external-tools)
+   - [inputs/team/*.md](#inputsteammd) — team composition inputs (for tl-team-composer)
+6. [Populating from external tools](#populating-from-external-tools)
    - [Jira](#jira)
    - [GitHub Issues / Projects](#github-issues--projects)
    - [Linear](#linear)
@@ -29,11 +46,11 @@ A **Claude skill** that reads lightweight Markdown inputs and generates a single
    - [PagerDuty / OpsGenie](#pagerduty--opsgenie)
    - [Google Calendar](#google-calendar)
    - [Any other tool](#any-other-tool)
-6. [Tone / audience mode](#tone--audience-mode)
-7. [Running the dashboard](#running-the-dashboard)
-8. [Outputs](#outputs)
-9. [Suggested cadence](#suggested-cadence)
-10. [Repo philosophy](#repo-philosophy)
+7. [Tone / audience mode](#tone--audience-mode)
+8. [Running the dashboard](#running-the-dashboard)
+9. [Outputs](#outputs)
+10. [Suggested cadence](#suggested-cadence)
+11. [Repo philosophy](#repo-philosophy)
 
 ---
 
@@ -68,23 +85,59 @@ Or all in one line once set up:
 
 ---
 
+## Skills
+
+### tl-dashboard
+
+**Cadence:** Weekly (Monday morning)
+**Run:** `./ops/run_dashboard.sh`
+**Output:** `outputs/dashboards/TL_Dashboard_YYYY-MM-DD.md`
+
+Reads all `inputs/` files and produces your full weekly TL Dashboard. Covers RAG status, outcomes, risks, decisions, stakeholder comms, technical culture, people health, org leverage, and next week's plan.
+
+Invoke in Claude by saying: *"run TL dashboard"* / *"weekly ops review"*
+
+---
+
+### tl-team-composer
+
+**Cadence:** Quarterly, or whenever a hiring decision is on the table
+**Run:** `./ops/compose.sh`
+**Output:** `outputs/team-composer/TeamComposition_YYYY-MM-DD.md`
+
+Reads `inputs/team/*.md` and produces a strategic team composition review. Analyses your current team as a portfolio of humans + AI agents, assesses which work types are substitutable, evaluates open hiring decisions (hire vs agent vs hybrid), identifies hidden gaps, and gives a 90-day composition target.
+
+Invoke in Claude by saying: *"run team composer"* / *"should I hire or use an agent"* / *"quarterly team review"*
+
+**This skill works with any LLM** — Claude, GPT-4o, Gemini, Llama, Bedrock, Azure OpenAI. See [LLM runners](#llm-runners).
+
+---
+
 ## How it works
 
 ```
-inputs/          ← you edit these (lightweight Markdown summaries)
-  todo.md        ← today only
+inputs/                   ← you edit these (lightweight Markdown summaries)
+  todo.md                 ← today only
   status_weekly.md
   decisions.md
   risks.md
   stakeholders.md
   signals/incidents.md
   people/*.md
-  jira_snapshot.md    (optional)
-  client_requests.md  (optional)
+  jira_snapshot.md        (optional)
+  client_requests.md      (optional)
+  team/                   ← for tl-team-composer
+    composition.md
+    workload_profile.md
+    agent_inventory.md
+    hiring_pipeline.md
+    capacity_constraints.md
+    token_costs.md         (optional)
           ↓
-  Claude reads everything
+  LLM reads everything (Claude / GPT-4o / Gemini / Llama / Bedrock)
           ↓
 outputs/dashboards/TL_Dashboard_YYYY-MM-DD.md
+outputs/team-composer/TeamComposition_YYYY-MM-DD.md
 ```
 
 The inputs are **human-edited summaries**, not a mirror of Jira. The goal is 5–10 minutes of your time, not 45 minutes of copy-paste.
@@ -137,6 +190,53 @@ nano ops/collect.config
 - `jq` — required for all API collectors (`brew install jq` / `apt install jq`)
 - `gh` — required for GitHub (`brew install gh` / https://cli.github.com)
 - `gcalcli` — required for Calendar gcalcli method (`pip install gcalcli`)
+
+---
+
+### `ops/compose.sh`
+
+Runs the `tl-team-composer` skill. Reads all `inputs/team/*.md` files, concatenates them with the skill prompt, sends to your configured LLM, and saves output to `outputs/team-composer/`.
+
+```bash
+# Run with default Claude runner
+./ops/compose.sh
+
+# Run with a different LLM
+./ops/compose.sh --runner openai
+./ops/compose.sh --runner gemini
+./ops/compose.sh --runner ollama    # fully local, air-gapped
+
+# Preview the full prompt without calling the LLM
+./ops/compose.sh --dry-run
+```
+
+---
+
+### LLM runners
+
+Both `run_dashboard.sh` and `compose.sh` support any LLM via interchangeable runner scripts. The skills themselves are plain Markdown prompts — no Claude-specific syntax.
+
+| Runner | LLM | Enterprise use case |
+|---|---|---|
+| `ops/claude_runner.sh` | Anthropic Claude | Claude API / self-hosted |
+| `ops/runners/openai_runner.sh` | GPT-4o, o1 | Azure OpenAI (common in enterprise) |
+| `ops/runners/gemini_runner.sh` | Gemini 1.5 Pro/Flash | Google Workspace orgs |
+| `ops/runners/ollama_runner.sh` | Llama 3.1, Mistral, etc. | **Fully air-gapped / on-prem** |
+| `ops/runners/bedrock_runner.sh` | Claude/Llama via AWS | AWS-native orgs |
+| `ops/runners/azure_ai_runner.sh` | Any Azure AI Studio model | Azure-first enterprises |
+
+**To use a non-Claude LLM:**
+```bash
+# 1. Create the runner (examples in ops/RUNNERS.md)
+cp ops/runners/openai_runner.example.sh ops/runners/openai_runner.sh
+# 2. Set your API key
+export OPENAI_API_KEY="..."
+# 3. Run
+./ops/run_dashboard.sh --runner openai
+./ops/compose.sh --runner openai
+```
+
+Full setup instructions, example runner scripts, and model recommendations: **`ops/RUNNERS.md`**
 
 ---
 
@@ -436,6 +536,26 @@ See [Populating from Jira](#jira) for how to generate this automatically.
 - Client Y — Flagged slow dashboard load times (>4s). Not committed yet. Owner: FE team to investigate.
 - Internal (Finance team) — Need CSV export from reports module. Low priority; agreed for Q2.
 ```
+
+---
+
+### `inputs/team/*.md` — team composition inputs (for tl-team-composer)
+
+Six files, all in `inputs/team/`. Pre-populated templates are included — fill them in before your first quarterly review.
+
+| File | What to put in it | Update cadence |
+|---|---|---|
+| `composition.md` | Current humans: name, role, seniority, primary work type, substitutability risk | When team changes |
+| `workload_profile.md` | % of team time by work type (Routine-Defined, Judgment-Heavy, Relational, Creative-Novel, Oversight) | Quarterly |
+| `agent_inventory.md` | AI tools in active use: what they handle, estimated cost, oversight required | When tools change |
+| `hiring_pipeline.md` | Open roles with Human / Agent / Hybrid evaluation for each gap | When pipeline changes |
+| `capacity_constraints.md` | What the team structurally can't keep up with right now | Monthly or as needed |
+| `token_costs.md` | Optional: actual agent costs + human fully-loaded costs for cost model output | Quarterly |
+
+**Tips:**
+- `workload_profile.md` is the hardest to fill honestly — most teams underestimate Routine-Defined work. Review a real sprint before estimating.
+- `agent_inventory.md` near-misses section is important — if an agent failed, log it. The composer uses it to calibrate substitutability confidence.
+- `token_costs.md` is optional. Without it, the skill still produces all sections except the cost model table.
 
 ---
 
@@ -777,6 +897,8 @@ Outputs are append-only and timestamped — never edit them. They feed the Delta
 | Friday or Monday | Review + tidy `inputs/status_weekly.md` | 5 min |
 | Monday | `./ops/run_dashboard.sh` → `./ops/serve.sh --open` | 1 min |
 | Monthly | Create summary in `outputs/monthly/` from last 4 dashboards | 15 min |
+| Quarterly | Update `inputs/team/*.md` files | 20 min |
+| Quarterly (or at hiring decision) | `./ops/compose.sh` → review in viewer | 1 min |
 
 ---
 
