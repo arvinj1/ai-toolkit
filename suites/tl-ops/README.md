@@ -1,5 +1,12 @@
 # TL-Ops: Team Lead Leadership Operating System
 
+[![License: BSL 1.1](https://img.shields.io/badge/license-BSL%201.1-blue.svg)](LICENSE)
+[![Free for personal use](https://img.shields.io/badge/personal%20use-free-green.svg)](COMMERCIAL.md)
+[![Commercial license available](https://img.shields.io/badge/commercial%20license-available-orange.svg)](COMMERCIAL.md)
+
+> **Free for personal and non-commercial use.**
+> Commercial use (within a for-profit organisation) requires a licence — see [COMMERCIAL.md](COMMERCIAL.md).
+
 A suite of **LLM skills** that give Engineering Team Leads a structured weekly operating rhythm and a strategic team composition framework — without sending data to any third-party SaaS.
 
 Works with **Claude, GPT-4o, Gemini, Llama (local), AWS Bedrock, Azure OpenAI** — see [LLM runners](#llm-runners).
@@ -908,3 +915,22 @@ Outputs are append-only and timestamped — never edit them. They feed the Delta
 - `outputs/` are **generated artifacts** — append-only, timestamped, never manually edited.
 - `state/` is machine state (e.g. last run date) — ignore it.
 - Less is more. A half-filled `status_weekly.md` produces a better dashboard than 200 lines of raw Jira export.
+
+---
+
+## Licence
+
+TL-Ops is licensed under the [Business Source License 1.1](LICENSE).
+
+| Use case | Licence required |
+|---|---|
+| Personal use (individual TL, your own team) | ✅ Free |
+| Non-profit, open-source, education, research | ✅ Free |
+| Evaluation (≤ 30 days) | ✅ Free |
+| Commercial use within a for-profit organisation | 💳 Paid — see [COMMERCIAL.md](COMMERCIAL.md) |
+| Embedding in a product or service | 💳 Paid — see [COMMERCIAL.md](COMMERCIAL.md) |
+
+On **2028-01-01**, all versions published before that date automatically convert to Apache 2.0 — TL-Ops will always eventually be fully open source.
+
+**Commercial licences, enterprise enquiries, and startup discounts:**
+→ [COMMERCIAL.md](COMMERCIAL.md) · [your-email@example.com](mailto:your-email@example.com)
