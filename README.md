@@ -9,7 +9,7 @@ A collection of Claude skill suites.
 | [intentforge](suites/intentforge/skills/intent-forge/README.md) | Gated, auditable engineering workflow: Intake → Planning → Jira → Implement → Test → Release |
 | [storytelling](suites/storytelling/skills/storytelling-framework/README.md) | Apply a 7-step storytelling framework to presentations and Jira artifacts |
 | [tl-ops](suites/tl-ops/README.md) | Team Lead leadership operating system: weekly TL Dashboard covering Technology Excellence, Execution & Client Focus, and Team & Community Influence |
-| [pr-stack-review](suites/pr-stack-review/skills/pr-stack-review/SKILL.md) | Create stacked PRs, rotate configured reviewers, and stop on failed pipeline checks |
+| [pr-stack-review](suites/pr-stack-review/README.md) | Create stacked PRs, rotate configured reviewers, and stop on failed CI or requested changes |
 
 ## Installation
 

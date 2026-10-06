@@ -1,13 +1,13 @@
 ---
 name: pr-stack-review
-description: Use when splitting a larger change into stacked GitHub pull requests, assigning reviewers in round-robin order from a configured group, and gating progress on successful pipeline checks.
+description: Use when splitting a larger change into stacked GitHub pull requests, assigning reviewers in round-robin order from a configured group, and gating progress on successful pipeline checks and reviewer approval.
 ---
 
 # PR Stack Review
 
 ## Overview
 
-Build a dependency-ordered stack of small, reviewable GitHub pull requests. Assign one reviewer per PR from a configured roster in round-robin order. Advance to the next PR only after every pipeline check on the current PR succeeds.
+Build a dependency-ordered stack of small, reviewable GitHub pull requests. Assign one reviewer per PR from a configured roster in round-robin order. Advance to the next PR only after every pipeline check succeeds and the assigned reviewer approves the current PR. See the [suite flow](../../README.md).
 
 ## When to Use
 
@@ -51,10 +51,17 @@ Process one PR at a time, starting with the PR closest to the target base:
    ```
 
    After watch exits, run the JSON query even if watch reported failure so the blocking check can be identified. Proceed only if the watch command succeeded, at least one check is present, and every check bucket is `pass`. Treat failure, cancellation, skipping, pending checks after watch exits, no reported checks, timeout, and authentication or API errors as a stop.
-5. On any stop, report the blocked PR and check evidence. Leave existing branches and PRs intact. Do not create, push, open, or assign the next PR.
-6. After all checks pass, move to the next PR. If a parent changes later, update descendants in order, rerun affected checks, and verify each PR still contains only its intended diff.
+5. After CI passes, inspect the review decision:
 
-If a check fails, fix that PR, push the correction only with the user's authorization, and rerun its checks before resuming. Never skip, waive, or reinterpret a failed check as success.
+   ```bash
+   gh pr view <PR-URL> --json reviewDecision,latestReviews
+   ```
+
+   Find the assigned reviewer's latest decisive review. Proceed only when it is `APPROVED`. If it is `CHANGES_REQUESTED`, stop and report the review. If approval is pending, keep the current PR at the gate and do not create or publish the next PR. Comments do not count as approval.
+6. On any stop, report the blocked PR and CI or review evidence. Leave existing branches and PRs intact. Do not create, push, open, or assign the next PR.
+7. After CI and review both pass, move to the next PR. If a parent changes later, update descendants in order, rerun affected checks, and verify each PR still contains only its intended diff.
+
+If CI fails or review requests changes, repair that PR and rerun its checks before requesting re-review. Preserve the existing stack and PR discussion. Never skip, waive, or reinterpret a failed gate as success.
 
 ## Common Rationalizations
 
@@ -63,6 +70,7 @@ If a check fails, fix that PR, push the correction only with the user's authoriz
 | "The next PR is independent enough; I can publish it while this pipeline is red." | Stop at the failed PR. The requested workflow gates downstream publication on success. |
 | "The team is configured, so requesting the whole team is equivalent." | Use the configured ordered usernames and request one reviewer only. |
 | "Skipped checks are probably harmless." | Treat skipped or missing results as unknown; stop and report them. |
+| "CI passed, so the next PR can start while review is pending." | Wait for the assigned reviewer's approval. CI and review are separate gates. |
 | "The local cursor is good enough for everyone." | The cursor is machine-local. Do not claim global round-robin fairness across machines or operators. |
 
 ## Red Flags
@@ -72,10 +80,11 @@ If a check fails, fix that PR, push the correction only with the user's authoriz
 - A PR diff includes changes already present in its parent.
 - Any downstream branch is pushed or PR opened before the previous PR's checks pass.
 - The workflow treats no checks, skipped checks, or API errors as success.
+- The workflow advances without checking the assigned reviewer's latest decisive review.
 - A reviewer rotation is described as shared across people or machines when only local state is configured.
 
 ## Verification
 
-Before reporting completion, verify the ordered PR URLs and bases, one reviewer request per PR, the current rotation result, and successful check buckets for every published PR. Report exact checks and states. If stopped, state which PR blocked progress and confirm that no later PR was created or published.
+Before reporting completion, verify the ordered PR URLs and bases, one reviewer request per PR, the current rotation result, successful check buckets, and assigned-reviewer approval for every published PR. Report exact checks and review states. If stopped, state which PR blocked progress and confirm that no later PR was created or published.
 
 The rotation cursor is stored under the user's local state directory, outside the repository, and is shared only by sessions on that machine. Cross-machine or multi-operator round robin requires a shared ledger or coordinator; until one is configured, do not claim team-wide fairness.
