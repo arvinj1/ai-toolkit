@@ -60,6 +60,20 @@ Enterprise installations may restrict fine-grained or classic personal access to
 
 See GitHub's current documentation for [pull request permissions](https://docs.github.com/en/rest/pulls/pulls), [check run permissions](https://docs.github.com/en/rest/checks/runs), [review comment permissions](https://docs.github.com/en/rest/pulls/comments), and [enterprise personal access token policies](https://docs.github.com/en/enterprise-cloud@latest/admin/enforcing-policies/enforcing-policies-for-your-enterprise/enforcing-policies-for-personal-access-tokens-in-your-enterprise).
 
+## GitHub Enterprise portability
+
+The workflow uses the GitHub CLI rather than a hard-coded github.com API endpoint. For GitHub Enterprise Server or Enterprise Cloud, authenticate to the repository host with the enterprise-approved method, then verify the host, account, and repository access:
+
+```bash
+gh auth login --hostname <enterprise-host>
+gh auth status --hostname <enterprise-host>
+gh repo view --json nameWithOwner,url,viewerPermission
+```
+
+The reviewer helper reads the repository URL to identify its host. Rotation state is isolated by host and repository; github.com retains its existing cursor path, and each enterprise host receives its own cursor. Reviewer names in the config must be valid usernames on that GitHub instance.
+
+This gives CLI-level portability, not a guarantee that every enterprise setup works without configuration. Before using a production repository, run a controlled pilot on a nonproduction repository or branch. Verify branch push, draft PR creation, reviewer assignment, check/status visibility, review and comment reads, and parent-branch PR bases. Do not merge during the pilot. Confirm the instance version, authentication/SSO, branch rules, and organization policies with its GitHub administrator. Stop if an operation is blocked; do not weaken review gates or repository policy to make the pilot pass.
+
 ## Monitoring boundary
 
 Monitoring runs inside the active Claude Code session through `gh pr checks` and `gh pr view`. GitHub Actions (or another configured CI provider) runs the pipeline; this skill observes the results and enforces the stop/advance decision. Closing or losing the session pauses monitoring. When resuming, reread the current PR's latest checks, review decision, comments, and base/head before continuing. Continuous monitoring across sessions requires a GitHub Actions workflow or another shared controller.

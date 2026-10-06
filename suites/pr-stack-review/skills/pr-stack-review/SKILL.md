@@ -17,7 +17,7 @@ Use this skill when the user asks to split a change into dependent PRs, rotate r
 
 ### 1. Establish repository and permissions
 
-1. Read repository guidance and inspect the worktree, current branch, remotes, default branch, and GitHub CLI authentication.
+1. Read repository guidance and inspect the worktree, current branch, remotes, default branch, and GitHub CLI authentication. For Enterprise, confirm `gh auth status --hostname <host>` and `gh repo view --json nameWithOwner,url,viewerPermission` identify the intended host, repository, and access before proceeding.
 2. Preserve unrelated working-tree changes. Do not overwrite or reset user work.
 3. Read `.claude/pr-stack-reviewers.json`. It must contain the requested reviewer group as an ordered list of GitHub usernames. Use `references/config.example.json` as the schema and replace all sample names. If the configuration or group is missing, ask for the roster. Never infer people or request the whole team as a substitute.
 4. Explain the planned stack and reviewer order before publishing. Get explicit user authorization before pushing branches, opening PRs, or requesting reviewers.

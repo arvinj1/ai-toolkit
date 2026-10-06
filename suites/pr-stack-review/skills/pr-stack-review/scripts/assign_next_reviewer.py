@@ -13,6 +13,7 @@ import sys
 import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
+from urllib.parse import urlparse
 
 
 def run(command: list[str]) -> str:
@@ -20,11 +21,16 @@ def run(command: list[str]) -> str:
     return result.stdout.strip()
 
 
-def get_repo() -> str:
-    repo = run(["gh", "repo", "view", "--json", "nameWithOwner", "--jq", ".nameWithOwner"])
-    if not re.fullmatch(r"[^/\s]+/[^/\s]+", repo):
+def get_repo() -> tuple[str, str]:
+    raw = run(["gh", "repo", "view", "--json", "nameWithOwner,url"])
+    data = json.loads(raw)
+    repo = data.get("nameWithOwner", "")
+    host = (urlparse(data.get("url", "")).hostname or "").casefold()
+    if not re.fullmatch(r"[^/\\s]+/[^/\\s]+", repo):
         raise RuntimeError(f"Could not resolve repository owner/name: {repo!r}")
-    return repo
+    if not host:
+        raise RuntimeError(f"Could not resolve GitHub host from repository URL: {data.get('url')!r}")
+    return host, repo
 
 
 def default_config_path() -> Path:
@@ -59,11 +65,14 @@ def write_state(path: Path, data: dict) -> None:
             os.unlink(tmp_name)
 
 
-def default_state_path(repo: str, group: str) -> Path:
+def default_state_path(host: str, repo: str, group: str) -> Path:
     root = Path(os.environ.get("XDG_STATE_HOME", Path.home() / ".local" / "state"))
     safe_repo = repo.replace("/", "__")
+    # Preserve the github.com cursor path; isolate enterprise hosts.
+    safe_host = re.sub(r"[^A-Za-z0-9_.-]", "_", host)
+    host_dir = "" if host == "github.com" else f"host__{safe_host}"
     safe_group = re.sub(r"[^A-Za-z0-9_.-]", "_", group)
-    return root / "claude-pr-stack-review" / safe_repo / f"{safe_group}.json"
+    return root / "claude-pr-stack-review" / host_dir / safe_repo / f"{safe_group}.json"
 
 
 def main() -> int:
@@ -89,8 +98,8 @@ def main() -> int:
         if len({name.casefold() for name in reviewers}) != len(reviewers):
             raise RuntimeError("Reviewer group contains duplicate usernames")
 
-        repo = get_repo()
-        state_path = Path(args.state_file) if args.state_file else default_state_path(repo, args.group)
+        host, repo = get_repo()
+        state_path = Path(args.state_file) if args.state_file else default_state_path(host, repo, args.group)
         state_path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
         lock_path = state_path.with_suffix(state_path.suffix + ".lock")
         lock_path.touch(mode=0o600, exist_ok=True)
@@ -130,6 +139,7 @@ def main() -> int:
 
             next_cursor = (selected_index + 1) % len(reviewers)
             write_state(state_path, {
+                "host": host,
                 "repo": repo,
                 "group": args.group,
                 "cursor": next_cursor,
