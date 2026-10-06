@@ -1,0 +1,76 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1100" height="865" viewBox="0 0 1100 865" role="img" aria-labelledby="title desc">
+  <title id="title">PR stack review flow</title>
+  <desc id="desc">Create one pull request at a time. A failed CI or requested change stops the stack until the same pull request is repaired. Continue only when all checks pass and the reviewer approves.</desc>
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L10,4 L0,8 z" fill="#475569"/>
+    </marker>
+    <style>
+      .title { font: 700 25px -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; fill: #0f172a; }
+      .subtitle { font: 15px -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; fill: #475569; }
+      .label { font: 600 17px -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; fill: #0f172a; text-anchor: middle; dominant-baseline: middle; }
+      .small { font: 13px -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; fill: #334155; }
+      .edge { fill: none; stroke: #475569; stroke-width: 2.5; marker-end: url(#arrow); }
+    </style>
+  </defs>
+  <rect width="1100" height="865" fill="#ffffff"/>
+  <text class="title" x="550" y="38" text-anchor="middle">PR stack review flow</text>
+  <text class="subtitle" x="550" y="64" text-anchor="middle">Advance only after CI passes and the assigned reviewer approves</text>
+
+  <!-- Main path -->
+  <path class="edge" d="M550 132 V138"/>
+  <path class="edge" d="M550 202 V232"/>
+  <path class="edge" d="M550 297 V337"/>
+  <path class="edge" d="M550 402 V455"/>
+  <path class="edge" d="M550 520 V580"/>
+  <path class="edge" d="M550 685 V760"/>
+  <text class="small" x="568" y="438">All checks passed</text>
+  <text class="small" x="568" y="551">Approved</text>
+  <text class="small" x="568" y="727">No</text>
+
+  <rect x="350" y="77" width="400" height="55" rx="14" fill="#eff6ff" stroke="#60a5fa" stroke-width="2"/>
+  <text class="label" x="550" y="105">Plan ordered PR stack</text>
+
+  <rect x="350" y="138" width="400" height="64" rx="14" fill="#eff6ff" stroke="#60a5fa" stroke-width="2"/>
+  <text class="label" x="550" y="170">Create and push current PR</text>
+
+  <rect x="350" y="232" width="400" height="65" rx="14" fill="#eff6ff" stroke="#60a5fa" stroke-width="2"/>
+  <text class="label" x="550" y="265">Assign next eligible reviewer</text>
+
+  <rect x="350" y="337" width="400" height="65" rx="14" fill="#f5f3ff" stroke="#a78bfa" stroke-width="2"/>
+  <text class="label" x="550" y="370">Watch all CI checks</text>
+
+  <rect x="350" y="455" width="400" height="65" rx="14" fill="#f5f3ff" stroke="#a78bfa" stroke-width="2"/>
+  <text class="label" x="550" y="488">Check reviewer decision</text>
+
+  <polygon points="550,580 650,632 550,685 450,632" fill="#ecfdf5" stroke="#34d399" stroke-width="2"/>
+  <text class="label" x="550" y="632">More PRs?</text>
+
+  <rect x="350" y="760" width="400" height="60" rx="14" fill="#ecfdf5" stroke="#34d399" stroke-width="2"/>
+  <text class="label" x="550" y="790">Stack complete</text>
+
+  <!-- Stop and repair path -->
+  <path class="edge" d="M350 370 H280"/>
+  <path class="edge" d="M350 488 H320 V430 H155 V410"/>
+  <path class="edge" d="M155 402 V455"/>
+  <path class="edge" d="M280 488 H320 V370 H350"/>
+  <text class="small" x="287" y="350" text-anchor="end">Fail / missing / skipped</text>
+  <text class="small" x="315" y="477" text-anchor="end">Changes requested</text>
+
+  <rect x="30" y="337" width="250" height="65" rx="14" fill="#fff1f2" stroke="#fb7185" stroke-width="2"/>
+  <text class="label" x="155" y="370">Stop the stack</text>
+  <rect x="30" y="455" width="250" height="65" rx="14" fill="#fffbeb" stroke="#fbbf24" stroke-width="2"/>
+  <text class="label" x="155" y="488">Repair current PR</text>
+
+  <!-- Waiting for review loop -->
+  <path class="edge" d="M750 488 H820"/>
+  <path class="edge" d="M945 455 V430 H780 V488 H750"/>
+  <text class="small" x="785" y="477">Waiting</text>
+  <text class="small" x="846" y="421">Poll again</text>
+  <rect x="820" y="455" width="250" height="65" rx="14" fill="#f8fafc" stroke="#94a3b8" stroke-width="2"/>
+  <text class="label" x="945" y="488">Wait on current PR</text>
+
+  <!-- Approved and more work loop -->
+  <path class="edge" d="M450 632 H300 V170 H350"/>
+  <text class="small" x="282" y="620" text-anchor="end">Yes: create next PR</text>
+</svg>

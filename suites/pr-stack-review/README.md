@@ -4,22 +4,9 @@ This Claude Code suite publishes a dependency-ordered PR stack, rotates one revi
 
 ## Flow
 
-```mermaid
-flowchart TD
-    A["Plan ordered PR stack"] --> B["Create and push current PR"]
-    B --> C["Assign next eligible reviewer"]
-    C --> D["Watch all CI checks"]
-    D -->|"Failed, cancelled, skipped, or missing"| E["Stop the stack"]
-    D -->|"All passed"| F["Check assigned reviewer decision"]
-    F -->|"Changes requested"| E
-    F -->|"Waiting for review"| G["Wait on current PR"]
-    G --> F
-    F -->|"Approved"| H{"More PRs?"}
-    H -->|"Yes"| B
-    H -->|"No"| I["Stack complete"]
-    E --> J["Repair current PR"]
-    J --> D
-```
+![PR stack review flow](assets/pr-stack-review-flow.svg)
+
+Editable Mermaid source: [pr-stack-review-flow.mmd](assets/pr-stack-review-flow.mmd).
 
 A failed gate blocks the stack at the current PR. Keep that PR open, repair it in place, rerun CI, address reviewer feedback, and wait for approval. Do not recreate the stack to clear a failure: that loses review context and creates replacement URLs and notifications. See the [passing and blocked walkthrough](examples/stack-run-walkthrough.md), or run its local simulator:
 

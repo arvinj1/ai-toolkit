@@ -1,0 +1,14 @@
+flowchart TD
+    A["Plan ordered PR stack"] --> B["Create and push current PR"]
+    B --> C["Assign next eligible reviewer"]
+    C --> D["Watch all CI checks"]
+    D -->|"Failed, cancelled, skipped, or missing"| E["Stop the stack"]
+    D -->|"All passed"| F["Check assigned reviewer decision"]
+    F -->|"Changes requested"| E
+    F -->|"Waiting for review"| G["Wait on current PR"]
+    G --> F
+    F -->|"Approved"| H{"More PRs?"}
+    H -->|"Yes"| B
+    H -->|"No"| I["Stack complete"]
+    E --> J["Repair current PR"]
+    J --> D
