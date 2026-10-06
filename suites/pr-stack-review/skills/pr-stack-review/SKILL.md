@@ -7,7 +7,7 @@ description: Use when splitting a larger change into stacked GitHub pull request
 
 ## Overview
 
-Build a dependency-ordered stack of small, reviewable GitHub pull requests. Assign one reviewer per PR from a configured roster in round-robin order. Advance to the next PR only after every pipeline check succeeds and the assigned reviewer approves the current PR. See the [suite flow](../../README.md).
+Build a dependency-ordered stack of small, reviewable GitHub pull requests. Assign one reviewer per PR from a configured roster in round-robin order. Advance to the next PR only after every pipeline check succeeds and the assigned reviewer approves the current PR. See the [suite flow](../../README.md) and the [simulated passing and failing walkthrough](../../examples/stack-run-walkthrough.md).
 
 ## When to Use
 
@@ -51,17 +51,26 @@ Process one PR at a time, starting with the PR closest to the target base:
    ```
 
    After watch exits, run the JSON query even if watch reported failure so the blocking check can be identified. Proceed only if the watch command succeeded, at least one check is present, and every check bucket is `pass`. Treat failure, cancellation, skipping, pending checks after watch exits, no reported checks, timeout, and authentication or API errors as a stop.
-5. After CI passes, inspect the review decision:
+
+5. After CI passes, inspect the review decision and conversation comments:
 
    ```bash
-   gh pr view <PR-URL> --json reviewDecision,latestReviews
+   gh pr view <PR-URL> --json reviewDecision,latestReviews,comments
+   gh api --paginate repos/{owner}/{repo}/pulls/{number}/comments
    ```
 
-   Find the assigned reviewer's latest decisive review. Proceed only when it is `APPROVED`. If it is `CHANGES_REQUESTED`, stop and report the review. If approval is pending, keep the current PR at the gate and do not create or publish the next PR. Comments do not count as approval.
+   Find the assigned reviewer's latest decisive review. Proceed only when it is `APPROVED`. Answer reviewer questions and actionable inline comments with evidence from the changed code and tests. Treat a requested change as a stop: repair this PR, rerun checks, respond to the reviewer, and wait for a new approval. If feedback is ambiguous and affects correctness, ask the reviewer for clarification; do not guess. Comments do not count as approval.
+
 6. On any stop, report the blocked PR and CI or review evidence. Leave existing branches and PRs intact. Do not create, push, open, or assign the next PR.
-7. After CI and review both pass, move to the next PR. If a parent changes later, update descendants in order, rerun affected checks, and verify each PR still contains only its intended diff.
+7. After CI and review both pass and reviewer questions have been addressed, move to the next PR. If a parent changes later, update descendants in order, rerun affected checks, and verify each PR still contains only its intended diff.
 
 If CI fails or review requests changes, repair that PR and rerun its checks before requesting re-review. Preserve the existing stack and PR discussion. Never skip, waive, or reinterpret a failed gate as success.
+
+### 4. Resume safely after interruption
+
+Monitoring occurs in the active Claude Code session. GitHub Actions (or another configured provider) executes CI; the skill polls GitHub through the CLI and enforces the gate. This suite has no background monitor, so monitoring pauses when the session exits.
+
+When resuming, re-read the current PR's latest check results, review decision, conversation comments, inline review comments, and base/head. Reconcile any parent updates and inspect the PR diff before acting. If GitHub cannot be queried or state is incomplete, stop with the PR blocked; never advance using stale state.
 
 ## Common Rationalizations
 
@@ -81,10 +90,11 @@ If CI fails or review requests changes, repair that PR and rerun its checks befo
 - Any downstream branch is pushed or PR opened before the previous PR's checks pass.
 - The workflow treats no checks, skipped checks, or API errors as success.
 - The workflow advances without checking the assigned reviewer's latest decisive review.
+- Reviewer questions or requested changes are ignored or answered without code/test evidence.
 - A reviewer rotation is described as shared across people or machines when only local state is configured.
 
 ## Verification
 
-Before reporting completion, verify the ordered PR URLs and bases, one reviewer request per PR, the current rotation result, successful check buckets, and assigned-reviewer approval for every published PR. Report exact checks and review states. If stopped, state which PR blocked progress and confirm that no later PR was created or published.
+Before reporting completion, verify the ordered PR URLs and bases, one reviewer request per PR, the current rotation result, successful check buckets, and assigned-reviewer approval for every published PR. Confirm that reviewer questions were answered and requested changes addressed. Report exact checks and review states. If stopped, state which PR blocked progress and confirm that no later PR was created or published.
 
 The rotation cursor is stored under the user's local state directory, outside the repository, and is shared only by sessions on that machine. Cross-machine or multi-operator round robin requires a shared ledger or coordinator; until one is configured, do not claim team-wide fairness.
