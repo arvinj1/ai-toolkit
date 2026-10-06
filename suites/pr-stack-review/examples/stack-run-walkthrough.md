@@ -1,6 +1,13 @@
 # Walkthrough: a passing stack and a blocked stack
 
-This is a **simulated** run using fictional PR numbers, check names, and review comments. It shows the decisions the skill should make; no GitHub checks or PRs were run for this example.
+This walkthrough uses fictional PR numbers, check names, and review comments. Its local simulator prints the same two example paths without contacting GitHub or creating branches, checks, or pull requests:
+
+```bash
+python3 suites/pr-stack-review/examples/run_stack_demo.py pass
+python3 suites/pr-stack-review/examples/run_stack_demo.py blocked
+```
+
+The simulator demonstrates the documented decision flow; it does not run the skill, call GitHub, execute CI, or validate a real PR stack.
 
 ## Stack plan
 
