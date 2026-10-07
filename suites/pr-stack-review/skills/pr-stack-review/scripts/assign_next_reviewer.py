@@ -38,16 +38,35 @@ def default_config_path() -> Path:
     return root / ".claude" / "pr-stack-reviewers.json"
 
 
-def get_pr_data(pr_url: str) -> tuple[str, set[str], bool, set[str]]:
+def get_pr_data(pr_url: str) -> tuple[str, set[str], bool, dict[str, str]]:
     raw = run([
         "gh", "pr", "view", pr_url, "--json", "author,reviewRequests,isDraft,latestReviews",
-        "--jq", "{author: .author.login, reviewRequests: [.reviewRequests[].login], isDraft: .isDraft, reviewedBy: [.latestReviews[].author.login]}",
+        "--jq", "{author: .author.login, reviewRequests: [.reviewRequests[].login], isDraft: .isDraft, reviewedBy: [.latestReviews[] | {login: .author.login, submittedAt: .submittedAt}]}",
     ])
     data = json.loads(raw)
     author = data.get("author") or ""
     requested = {str(login).casefold() for login in data.get("reviewRequests", [])}
-    reviewed_by = {str(login).casefold() for login in data.get("reviewedBy", [])}
+    reviewed_by = {
+        str(review.get("login", "")).casefold(): str(review.get("submittedAt") or "")
+        for review in data.get("reviewedBy", [])
+    }
     return author.casefold(), requested, bool(data.get("isDraft")), reviewed_by
+
+
+def reviewed_for_attempt(reviewed_by: dict[str, str], login: str, requested_at: str | None) -> bool:
+    submitted_at = reviewed_by.get(login.casefold())
+    if not isinstance(submitted_at, str) or not submitted_at or not isinstance(requested_at, str):
+        return False
+    try:
+        submitted = datetime.fromisoformat(submitted_at.replace("Z", "+00:00"))
+        requested = datetime.fromisoformat(requested_at.replace("Z", "+00:00"))
+    except (TypeError, ValueError):
+        return False
+    if submitted.tzinfo is None:
+        submitted = submitted.replace(tzinfo=timezone.utc)
+    if requested.tzinfo is None:
+        requested = requested.replace(tzinfo=timezone.utc)
+    return submitted >= requested
 
 
 def assignment_key(pr_url: str) -> str:
@@ -135,7 +154,10 @@ def main() -> int:
             record = assignments.get(pr_key)
             if record is not None and record.get("status") == "confirmed":
                 login = record.get("reviewer", "").casefold()
-                if requested - {login} or (login not in requested and login not in reviewed_by):
+                if requested - {login} or (
+                    login not in requested
+                    and not reviewed_for_attempt(reviewed_by, login, record.get("requested_at"))
+                ):
                     raise RuntimeError(
                         "The confirmed reviewer assignment no longer matches GitHub; reconcile it manually before retrying"
                     )
@@ -175,8 +197,9 @@ def main() -> int:
                     "reviewer_index": selected_index,
                     "cursor_after": (selected_index + 1) % len(reviewers),
                     "status": "pending",
-                    "updated_at": datetime.now(timezone.utc).isoformat(),
+                    "requested_at": datetime.now(timezone.utc).isoformat(),
                 }
+                record["updated_at"] = record["requested_at"]
                 assignments[pr_key] = record
                 state.update({"host": host, "repo": repo, "group": args.group})
                 # Save intent first so a retry can safely reuse this reviewer.
@@ -196,7 +219,9 @@ def main() -> int:
                 raise RuntimeError(
                     "This PR has a different reviewer request than the stored assignment; reconcile it manually before retrying"
                 )
-            if login.casefold() not in requested and login.casefold() not in reviewed_by:
+            if login.casefold() not in requested and not reviewed_for_attempt(
+                reviewed_by, login, record.get("requested_at")
+            ):
                 try:
                     run(["gh", "pr", "edit", args.pr_url, "--add-reviewer", login])
                 except subprocess.CalledProcessError as error:
@@ -207,14 +232,21 @@ def main() -> int:
                             f"Could not determine whether GitHub accepted the request for @{login}; "
                             "the pending assignment was saved, so retry this same PR."
                         ) from error
-                    if login.casefold() not in requested_after_error and login.casefold() not in reviewed_after_error:
+                    if (
+                        login.casefold() not in requested_after_error
+                        and not reviewed_for_attempt(
+                            reviewed_after_error, login, record.get("requested_at")
+                        )
+                    ):
                         detail = error.stderr.strip() if error.stderr else str(error)
                         raise RuntimeError(f"GitHub did not confirm reviewer request for @{login}: {detail}") from error
 
             _, requested_after, still_draft, reviewed_after = get_pr_data(args.pr_url)
             if still_draft:
                 raise RuntimeError("The PR became a draft before reviewer assignment was confirmed")
-            if login.casefold() not in requested_after and login.casefold() not in reviewed_after:
+            if login.casefold() not in requested_after and not reviewed_for_attempt(
+                reviewed_after, login, record.get("requested_at")
+            ):
                 raise RuntimeError(
                     f"GitHub did not show @{login} in this PR's review requests; the pending assignment was saved for retry"
                 )

@@ -28,6 +28,7 @@ class ReviewerAssignmentTests(unittest.TestCase):
         self.addCleanup(self.env.stop)
         self.requests = {}
         self.drafts = {}
+        self.reviews = {}
         self.edits = []
 
     def tearDown(self):
@@ -42,7 +43,7 @@ class ReviewerAssignmentTests(unittest.TestCase):
                 "author": "author",
                 "reviewRequests": list(self.requests.get(pr_url, [])),
                 "isDraft": self.drafts.get(pr_url, False),
-                "reviewedBy": [],
+                "reviewedBy": self.reviews.get(pr_url, []),
             }
         elif command[:3] == ["gh", "pr", "edit"]:
             pr_url, login = command[3], command[-1]
@@ -56,6 +57,12 @@ class ReviewerAssignmentTests(unittest.TestCase):
     def invoke(self, pr_url):
         with patch.object(sys, "argv", ["assign_next_reviewer.py", pr_url, "--group", "team", "--config", str(self.config)]):
             return assigner.main()
+
+    def state_path(self):
+        return (
+            self.root / "state" / "claude-pr-stack-review" / "host__github.example.com"
+            / "octo__service" / "team.json"
+        )
 
     def test_service_repo_passes_validation(self):
         with patch.object(assigner, "run", return_value=json.dumps({
@@ -96,15 +103,75 @@ class ReviewerAssignmentTests(unittest.TestCase):
             self.assertEqual(self.invoke(pr), 0)
 
         self.assertEqual(self.edits, [(pr, "reviewer-a")])
-        state_path = (
-            self.root / "state" / "claude-pr-stack-review" / "host__github.example.com"
-            / "octo__service" / "team.json"
-        )
-        state = json.loads(state_path.read_text())
+        state = json.loads(self.state_path().read_text())
         self.assertEqual(state["cursor"], 1)
         record = state["assignments"][assigner.assignment_key(pr)]
         self.assertEqual(record["reviewer"], "reviewer-a")
         self.assertEqual(record["status"], "confirmed")
+
+    def test_historical_review_does_not_replace_first_review_request(self):
+        pr = "https://github.example.com/octo/service/pull/19"
+        self.reviews[pr] = [{"login": "reviewer-a", "submittedAt": "2020-01-01T00:00:00Z"}]
+        with patch.object(assigner.subprocess, "run", side_effect=self.fake_run):
+            self.assertEqual(self.invoke(pr), 0)
+        self.assertEqual(self.edits, [(pr, "reviewer-a")])
+
+    def test_pending_retry_accepts_review_submitted_after_saved_attempt(self):
+        pr = "https://github.example.com/octo/service/pull/20"
+        pr_key = assigner.assignment_key(pr)
+        self.state_path().parent.mkdir(parents=True)
+        self.state_path().write_text(json.dumps({
+            "cursor": 0,
+            "assignments": {
+                pr_key: {
+                    "reviewer": "reviewer-a",
+                    "reviewer_index": 0,
+                    "cursor_after": 1,
+                    "requested_at": "2020-01-01T00:00:00+00:00",
+                    "status": "pending",
+                }
+            },
+        }))
+        self.reviews[pr] = [{"login": "reviewer-a", "submittedAt": "2020-01-02T00:00:00Z"}]
+        with patch.object(assigner.subprocess, "run", side_effect=self.fake_run):
+            self.assertEqual(self.invoke(pr), 0)
+        self.assertEqual(self.edits, [])
+        state = json.loads(self.state_path().read_text())
+        self.assertEqual(state["assignments"][pr_key]["status"], "confirmed")
+
+    def test_old_review_does_not_confirm_failed_request_attempt(self):
+        pr = "https://github.example.com/octo/service/pull/21"
+        self.reviews[pr] = [{"login": "reviewer-a", "submittedAt": "2020-01-01T00:00:00Z"}]
+
+        def fail_reviewer_request(command, **kwargs):
+            if command[:3] == ["gh", "pr", "edit"]:
+                self.edits.append((command[3], command[-1]))
+                raise assigner.subprocess.CalledProcessError(1, command, stderr="request failed")
+            return self.fake_run(command, **kwargs)
+
+        with patch.object(assigner.subprocess, "run", side_effect=fail_reviewer_request):
+            self.assertEqual(self.invoke(pr), 1)
+        self.assertEqual(self.edits, [(pr, "reviewer-a")])
+        self.assertEqual(self.requests.get(pr, []), [])
+
+    def test_confirmed_assignment_rejects_review_older_than_attempt(self):
+        pr = "https://github.example.com/octo/service/pull/22"
+        pr_key = assigner.assignment_key(pr)
+        self.state_path().parent.mkdir(parents=True)
+        self.state_path().write_text(json.dumps({
+            "cursor": 1,
+            "assignments": {
+                pr_key: {
+                    "reviewer": "reviewer-a",
+                    "requested_at": "2021-01-01T00:00:00+00:00",
+                    "status": "confirmed",
+                }
+            },
+        }))
+        self.reviews[pr] = [{"login": "reviewer-a", "submittedAt": "2020-01-01T00:00:00Z"}]
+        with patch.object(assigner.subprocess, "run", side_effect=self.fake_run):
+            self.assertEqual(self.invoke(pr), 1)
+        self.assertEqual(self.edits, [])
 
     def test_draft_pr_stops_without_reviewer_request(self):
         pr = "https://github.example.com/octo/service/pull/18"
