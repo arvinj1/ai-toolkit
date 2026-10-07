@@ -66,7 +66,7 @@ def reviewed_for_attempt(reviewed_by: dict[str, str], login: str, requested_at: 
         submitted = submitted.replace(tzinfo=timezone.utc)
     if requested.tzinfo is None:
         requested = requested.replace(tzinfo=timezone.utc)
-    return submitted >= requested
+    return submitted.replace(microsecond=0) >= requested.replace(microsecond=0)
 
 
 def assignment_key(pr_url: str) -> str:

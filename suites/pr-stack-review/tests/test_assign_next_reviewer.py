@@ -139,6 +139,31 @@ class ReviewerAssignmentTests(unittest.TestCase):
         state = json.loads(self.state_path().read_text())
         self.assertEqual(state["assignments"][pr_key]["status"], "confirmed")
 
+    def test_pending_retry_accepts_review_with_same_second_timestamp(self):
+        pr = "https://github.example.com/octo/service/pull/23"
+        pr_key = assigner.assignment_key(pr)
+        self.state_path().parent.mkdir(parents=True)
+        self.state_path().write_text(json.dumps({
+            "cursor": 0,
+            "assignments": {
+                pr_key: {
+                    "reviewer": "reviewer-a",
+                    "reviewer_index": 0,
+                    "cursor_after": 1,
+                    "requested_at": "2020-01-01T00:00:00.123456+00:00",
+                    "status": "pending",
+                }
+            },
+        }))
+        self.reviews[pr] = [{"login": "reviewer-a", "submittedAt": "2020-01-01T00:00:00Z"}]
+
+        with patch.object(assigner.subprocess, "run", side_effect=self.fake_run):
+            self.assertEqual(self.invoke(pr), 0)
+
+        self.assertEqual(self.edits, [])
+        state = json.loads(self.state_path().read_text())
+        self.assertEqual(state["assignments"][pr_key]["status"], "confirmed")
+
     def test_old_review_does_not_confirm_failed_request_attempt(self):
         pr = "https://github.example.com/octo/service/pull/21"
         self.reviews[pr] = [{"login": "reviewer-a", "submittedAt": "2020-01-01T00:00:00Z"}]
