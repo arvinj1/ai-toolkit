@@ -219,7 +219,7 @@ def main() -> int:
                     f"GitHub did not show @{login} in this PR's review requests; the pending assignment was saved for retry"
                 )
 
-            next_cursor = int(record["cursor_after"])
+            next_cursor = (selected_index + 1) % len(reviewers)
             record.update({"status": "confirmed", "updated_at": datetime.now(timezone.utc).isoformat()})
             state.update({
                 "host": host,
