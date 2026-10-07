@@ -1,0 +1,9 @@
+{
+  "groups": {
+    "rtc-reviewers": [
+      "reviewer-one",
+      "reviewer-two",
+      "reviewer-three"
+    ]
+  }
+}
