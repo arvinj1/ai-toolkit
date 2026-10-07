@@ -245,6 +245,10 @@ def main() -> int:
             _, requested_after, still_draft, reviewed_after = get_pr_data(args.pr_url)
             if still_draft:
                 raise RuntimeError("The PR became a draft before reviewer assignment was confirmed")
+            if requested_after - {login.casefold()}:
+                raise RuntimeError(
+                    "This PR has a different reviewer request than the stored assignment; reconcile it manually before retrying"
+                )
             if login.casefold() not in requested_after and not reviewed_for_attempt(
                 reviewed_after, login, record.get("requested_at")
             ):
