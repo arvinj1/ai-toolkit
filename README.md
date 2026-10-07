@@ -1,6 +1,6 @@
 # ai-toolkit
 
-A collection of Claude skill suites.
+A collection of AI coding-agent skill suites and repository skills.
 
 ## Suites
 
@@ -34,3 +34,11 @@ Install a suite's skills into your user profile (global) or into a specific proj
 ```
 
 After installing, run Claude Code from the target repo so it discovers the skills under `.claude/skills/`.
+
+## Repository skills
+
+| Skill | Use |
+|---|---|
+| [Senior systems code review](.agents/skills/code-review/SKILL.md) | Review design, correctness, and validation for RTC, C++, networking, media, concurrency, and distributed systems. The same skill is mirrored at [`.github/skills/code-review`](.github/skills/code-review/SKILL.md) for GitHub Copilot. |
+
+Keep the Codex and Copilot copies synchronized. GitHub Copilot code review reads repository skills from the pull request's head branch, so the skill must be present on that branch to guide that review.
