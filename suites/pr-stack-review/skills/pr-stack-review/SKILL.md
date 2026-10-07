@@ -20,7 +20,7 @@ Use this skill when the user asks to split a change into dependent PRs, rotate r
 1. Read repository guidance and inspect the worktree, current branch, remotes, default branch, and GitHub CLI authentication. For Enterprise, confirm `gh auth status --hostname <host>` and `gh repo view --json nameWithOwner,url,viewerPermission` identify the intended host, repository, and access before proceeding.
 2. Preserve unrelated working-tree changes. Do not overwrite or reset user work.
 3. Read `.claude/pr-stack-reviewers.json`. It must contain the requested reviewer group as an ordered list of GitHub usernames. Use `references/config.example.json` as the schema and replace all sample names. If the configuration or group is missing, ask for the roster. Never infer people or request the whole team as a substitute.
-4. Explain the planned stack and reviewer order before publishing. Get explicit user authorization before pushing branches, opening PRs, or requesting reviewers.
+4. Explain the planned stack and reviewer order before publishing. Get explicit user authorization before pushing branches, opening PRs, marking a draft ready for review, or requesting reviewers.
 
 ### 2. Decompose the work
 
@@ -35,7 +35,7 @@ Process one PR at a time, starting with the PR closest to the target base:
 
 1. Create the local branch from its approved parent. Implement only that slice, run its local checks, and inspect the diff.
 2. After user authorization, push the branch and open a draft PR with the parent branch as its base. Include the PR's scope, parent and child links, tests, and risks.
-3. Assign exactly one reviewer using:
+3. A draft PR cannot accept a review request. Before marking it ready, obtain explicit user authorization to make it visible for review and request a reviewer. If authorization is not granted, leave it as a draft and stop this PR here. After authorization, run `gh pr ready <PR-URL>` and verify `gh pr view <PR-URL> --json isDraft --jq .isDraft` reports `false`; stop if either command fails or the PR remains a draft. Then assign exactly one reviewer using:
 
    ```bash
    python3 "${CLAUDE_SKILL_DIR}/scripts/assign_next_reviewer.py" <PR-URL> --group <group-name>
@@ -56,7 +56,7 @@ Process one PR at a time, starting with the PR closest to the target base:
 
    ```bash
    gh pr view <PR-URL> --json reviewDecision,latestReviews,comments
-   gh api --paginate repos/{owner}/{repo}/pulls/{number}/comments
+   gh api --hostname <verified-host> --paginate repos/{owner}/{repo}/pulls/{number}/comments
    ```
 
    Find the assigned reviewer's latest decisive review. Proceed only when it is `APPROVED`. Answer reviewer questions and actionable inline comments with evidence from the changed code and tests. Treat a requested change as a stop: repair this PR, rerun checks, respond to the reviewer, and wait for a new approval. If feedback is ambiguous and affects correctness, ask the reviewer for clarification; do not guess. Comments do not count as approval.

@@ -26,7 +26,7 @@ def get_repo() -> tuple[str, str]:
     data = json.loads(raw)
     repo = data.get("nameWithOwner", "")
     host = (urlparse(data.get("url", "")).hostname or "").casefold()
-    if not re.fullmatch(r"[^/\\s]+/[^/\\s]+", repo):
+    if repo.count("/") != 1 or any(char.isspace() or char == "\\" for char in repo):
         raise RuntimeError(f"Could not resolve repository owner/name: {repo!r}")
     if not host:
         raise RuntimeError(f"Could not resolve GitHub host from repository URL: {data.get('url')!r}")
@@ -38,15 +38,24 @@ def default_config_path() -> Path:
     return root / ".claude" / "pr-stack-reviewers.json"
 
 
-def get_pr_data(pr_url: str) -> tuple[str, set[str]]:
+def get_pr_data(pr_url: str) -> tuple[str, set[str], bool, set[str]]:
     raw = run([
-        "gh", "pr", "view", pr_url, "--json", "author,reviewRequests",
-        "--jq", "{author: .author.login, reviewRequests: [.reviewRequests[].login]}",
+        "gh", "pr", "view", pr_url, "--json", "author,reviewRequests,isDraft,latestReviews",
+        "--jq", "{author: .author.login, reviewRequests: [.reviewRequests[].login], isDraft: .isDraft, reviewedBy: [.latestReviews[].author.login]}",
     ])
     data = json.loads(raw)
     author = data.get("author") or ""
     requested = {str(login).casefold() for login in data.get("reviewRequests", [])}
-    return author.casefold(), requested
+    reviewed_by = {str(login).casefold() for login in data.get("reviewedBy", [])}
+    return author.casefold(), requested, bool(data.get("isDraft")), reviewed_by
+
+
+def assignment_key(pr_url: str) -> str:
+    parsed = urlparse(pr_url)
+    match = re.fullmatch(r"/([^/]+)/([^/]+)/pull/([0-9]+)/?", parsed.path)
+    if parsed.scheme != "https" or not parsed.hostname or not match:
+        raise RuntimeError(f"Expected a GitHub pull request URL, got {pr_url!r}")
+    return f"{parsed.hostname.casefold()}/{match.group(1).casefold()}/{match.group(2).casefold()}/pull/{match.group(3)}"
 
 
 def write_state(path: Path, data: dict) -> None:
@@ -108,46 +117,118 @@ def main() -> int:
             fcntl.flock(lock.fileno(), fcntl.LOCK_EX)
             if state_path.exists():
                 state = json.loads(state_path.read_text(encoding="utf-8"))
-                cursor = int(state.get("cursor", 0)) % len(reviewers)
             else:
-                cursor = 0
+                state = {}
+            cursor = int(state.get("cursor", 0)) % len(reviewers)
+            assignments = state.setdefault("assignments", {})
+            pr_key = assignment_key(args.pr_url)
+            if not pr_key.startswith(f"{host}/{repo.casefold()}/pull/"):
+                raise RuntimeError(f"PR URL does not match the current repository {repo} on {host}")
 
-            author, requested = get_pr_data(args.pr_url)
-            selected_index = None
-            for offset in range(len(reviewers)):
-                index = (cursor + offset) % len(reviewers)
-                login = reviewers[index]
-                if login.casefold() != author and login.casefold() not in requested:
-                    selected_index = index
-                    break
-            if selected_index is None:
-                raise RuntimeError("No eligible configured reviewer remains for this PR")
+            author, requested, is_draft, reviewed_by = get_pr_data(args.pr_url)
+            if is_draft:
+                raise RuntimeError(
+                    "This PR is a draft. Obtain explicit user authorization, mark it ready with "
+                    "`gh pr ready <PR-URL>`, then retry reviewer assignment."
+                )
 
-            login = reviewers[selected_index]
-            try:
-                run(["gh", "pr", "edit", args.pr_url, "--add-reviewer", login])
-            except subprocess.CalledProcessError as error:
-                # A network error can happen after GitHub accepted the request.
-                _, requested_after_error = get_pr_data(args.pr_url)
-                if login.casefold() not in requested_after_error:
-                    detail = error.stderr.strip() if error.stderr else str(error)
-                    raise RuntimeError(f"GitHub did not confirm reviewer request for @{login}: {detail}") from error
+            record = assignments.get(pr_key)
+            if record is not None and record.get("status") == "confirmed":
+                print(f"Reviewer assignment for {args.pr_url} is already recorded as @{record.get('reviewer')}; rotation unchanged.")
+                return 0
+            if record is None:
+                pending = [key for key, item in assignments.items() if item.get("status") == "pending"]
+                if pending:
+                    raise RuntimeError(
+                        f"Another reviewer assignment is pending for {pending[0]}; retry it before assigning a different PR"
+                    )
 
-            _, requested_after = get_pr_data(args.pr_url)
-            if login.casefold() not in requested_after:
-                raise RuntimeError(f"GitHub did not show @{login} in this PR's review requests; rotation was not advanced")
+                configured_requests = [
+                    index for index, login in enumerate(reviewers)
+                    if login.casefold() in requested and login.casefold() != author
+                ]
+                if requested:
+                    if len(configured_requests) == 1 and len(requested) == 1:
+                        selected_index = configured_requests[0]
+                    else:
+                        raise RuntimeError(
+                            "This PR already has reviewer requests that cannot be reconciled to exactly one configured reviewer"
+                        )
+                else:
+                    selected_index = None
+                    for offset in range(len(reviewers)):
+                        index = (cursor + offset) % len(reviewers)
+                        if reviewers[index].casefold() != author:
+                            selected_index = index
+                            break
+                    if selected_index is None:
+                        raise RuntimeError("No eligible configured reviewer remains for this PR")
 
-            next_cursor = (selected_index + 1) % len(reviewers)
-            write_state(state_path, {
+                login = reviewers[selected_index]
+                record = {
+                    "reviewer": login,
+                    "reviewer_index": selected_index,
+                    "cursor_after": (selected_index + 1) % len(reviewers),
+                    "status": "pending",
+                    "updated_at": datetime.now(timezone.utc).isoformat(),
+                }
+                assignments[pr_key] = record
+                state.update({"host": host, "repo": repo, "group": args.group})
+                # Save intent first so a retry can safely reuse this reviewer.
+                write_state(state_path, state)
+            else:
+                login = record.get("reviewer", "")
+                if login not in reviewers:
+                    raise RuntimeError(
+                        f"Stored reviewer @{login} is no longer in the configured group; reconcile the roster before retrying"
+                    )
+                selected_index = reviewers.index(login)
+                if login.casefold() == author:
+                    raise RuntimeError("Stored reviewer is now the PR author; reconcile this assignment manually")
+
+            unexpected_requests = requested - {login.casefold()}
+            if unexpected_requests:
+                raise RuntimeError(
+                    "This PR has a different reviewer request than the stored assignment; reconcile it manually before retrying"
+                )
+            if login.casefold() not in requested and login.casefold() not in reviewed_by:
+                try:
+                    run(["gh", "pr", "edit", args.pr_url, "--add-reviewer", login])
+                except subprocess.CalledProcessError as error:
+                    try:
+                        _, requested_after_error, _, reviewed_after_error = get_pr_data(args.pr_url)
+                    except (subprocess.CalledProcessError, ValueError, json.JSONDecodeError):
+                        raise RuntimeError(
+                            f"Could not determine whether GitHub accepted the request for @{login}; "
+                            "the pending assignment was saved, so retry this same PR."
+                        ) from error
+                    if login.casefold() not in requested_after_error and login.casefold() not in reviewed_after_error:
+                        detail = error.stderr.strip() if error.stderr else str(error)
+                        raise RuntimeError(f"GitHub did not confirm reviewer request for @{login}: {detail}") from error
+
+            _, requested_after, still_draft, reviewed_after = get_pr_data(args.pr_url)
+            if still_draft:
+                raise RuntimeError("The PR became a draft before reviewer assignment was confirmed")
+            if login.casefold() not in requested_after and login.casefold() not in reviewed_after:
+                raise RuntimeError(
+                    f"GitHub did not show @{login} in this PR's review requests; the pending assignment was saved for retry"
+                )
+
+            next_cursor = int(record["cursor_after"])
+            record.update({"status": "confirmed", "updated_at": datetime.now(timezone.utc).isoformat()})
+            state.update({
                 "host": host,
                 "repo": repo,
                 "group": args.group,
                 "cursor": next_cursor,
                 "last_assigned": login,
                 "last_pr": args.pr_url,
-                "updated_at": datetime.now(timezone.utc).isoformat(),
             })
-            print(f"Assigned @{login} to {args.pr_url}; next rotation position is {next_cursor + 1}/{len(reviewers)}.")
+            write_state(state_path, state)
+            print(
+                f"Assigned @{login} to {args.pr_url}; next rotation position is "
+                f"{next_cursor + 1}/{len(reviewers)}."
+            )
         return 0
     except (OSError, ValueError, json.JSONDecodeError, subprocess.CalledProcessError, RuntimeError) as error:
         print(f"error: {error}", file=sys.stderr)
