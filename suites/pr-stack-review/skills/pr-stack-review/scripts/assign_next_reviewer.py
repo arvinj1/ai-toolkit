@@ -134,6 +134,11 @@ def main() -> int:
 
             record = assignments.get(pr_key)
             if record is not None and record.get("status") == "confirmed":
+                login = record.get("reviewer", "").casefold()
+                if requested - {login} or (login not in requested and login not in reviewed_by):
+                    raise RuntimeError(
+                        "The confirmed reviewer assignment no longer matches GitHub; reconcile it manually before retrying"
+                    )
                 print(f"Reviewer assignment for {args.pr_url} is already recorded as @{record.get('reviewer')}; rotation unchanged.")
                 return 0
             if record is None:
