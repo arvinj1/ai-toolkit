@@ -206,11 +206,12 @@ def main() -> int:
                 write_state(state_path, state)
             else:
                 login = record.get("reviewer", "")
-                if login not in reviewers:
+                normalized_reviewers = [reviewer.casefold() for reviewer in reviewers]
+                if login.casefold() not in normalized_reviewers:
                     raise RuntimeError(
                         f"Stored reviewer @{login} is no longer in the configured group; reconcile the roster before retrying"
                     )
-                selected_index = reviewers.index(login)
+                selected_index = normalized_reviewers.index(login.casefold())
                 if login.casefold() == author:
                     raise RuntimeError("Stored reviewer is now the PR author; reconcile this assignment manually")
 
