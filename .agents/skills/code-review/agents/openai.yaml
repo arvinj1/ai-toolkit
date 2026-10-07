@@ -1,0 +1,6 @@
+interface:
+  display_name: "Senior Systems Code Review"
+  short_description: "Senior review for RTC, C++, and distributed systems"
+  default_prompt: "Use $code-review to review this change for design, correctness, and validation risks."
+policy:
+  allow_implicit_invocation: true
